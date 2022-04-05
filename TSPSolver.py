@@ -19,6 +19,7 @@ from TSPClasses import *
 import heapq
 import itertools
 from PriorityQueue import *
+import functools
 
 # Augmented TSP Solution.
 # Represents a (potentially partial) path, incl. costs
@@ -320,6 +321,50 @@ class TSPSolver:
         algorithm</returns>
     '''
 
+    @functools.cache
+    def g(self, new_city_idx, existing_path):
+        if len(existing_path) == 0:
+            return (self.costs[new_city_idx][0], None)
+        if new_city_idx not in existing_path:
+            results = []
+            # OPT: tuple linear search can be replaced with indexing
+            for city_idx in existing_path:
+                results.append(self.costs[new_city_idx][city_idx] + self.g(city_idx, tuple([x for x in existing_path if x != city_idx]))[0])
+            minResult = (results[0], existing_path[0])
+            for (idx, result) in enumerate(results[1:]):
+                if result < minResult[0]:
+                    minResult = (result, existing_path[idx+1])
+            return minResult
+
     def fancy( self,time_allowance=60.0 ):
-        # Held-Karp algorithm, with whatever modifications are interesting
-        pass
+        # Held-Karp algorithm (mediocre tuple implementation)
+        # TODO: Remove cache to avoid tuple construction
+        results = {}
+        cities = self._scenario.getCities()
+        ncities = len(cities)
+        foundOptimalTour = False
+        count = (ncities - 1) * (2**ncities)
+        start_time = time.time()
+        # Set up the cost matrix & reduce it
+        self.initializeReducedCostMatrix()
+        # Solve
+        result_algo = self.g(0, tuple(range(1, ncities)))
+        route = [cities[0]]
+        remaining = tuple(range(1,ncities))
+        while result_algo[1] != None:
+            route.append(cities[result_algo[1]])
+            remaining = tuple([x for x in remaining if x != result_algo[1]])
+            result_algo = self.g(result_algo[1], remaining)
+        end_time = time.time()
+        bssf = TSPSolution(route)
+        # Set due to the spec
+        self._bssf = bssf
+        results['cost'] = bssf.cost if bssf != None else math.inf
+        results['time'] = end_time - start_time
+        results['count'] = count
+        results['soln'] = bssf
+        results['max'] = None
+        results['total'] = None
+        results['pruned'] = None
+        return results
+
