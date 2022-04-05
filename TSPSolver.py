@@ -19,7 +19,7 @@ from TSPClasses import *
 import heapq
 import itertools
 from PriorityQueue import *
-import functools
+from bitarray import bitarray, frozenbitarray, util
 
 # Augmented TSP Solution.
 # Represents a (potentially partial) path, incl. costs
@@ -321,39 +321,50 @@ class TSPSolver:
         algorithm</returns>
     '''
 
-    @functools.cache
-    def g(self, new_city_idx, existing_path):
-        if len(existing_path) == 0:
-            return (self.costs[new_city_idx][0], None)
-        if new_city_idx not in existing_path:
-            results = []
-            # OPT: tuple linear search can be replaced with indexing
-            for city_idx in existing_path:
-                results.append(self.costs[new_city_idx][city_idx] + self.g(city_idx, tuple([x for x in existing_path if x != city_idx]))[0])
-            minResult = (results[0], existing_path[0])
-            for (idx, result) in enumerate(results[1:]):
-                if result < minResult[0]:
-                    minResult = (result, existing_path[idx+1])
-            return minResult
+    def g(self, new_city_idx, existing_path_temp):
+        # Warning: indices probably broken
+        existing_path_frozen = frozenbitarray(existing_path_temp)
+        if existing_path_frozen in self.g_back[new_city_idx]:
+            return self.g_back[new_city_idx][existing_path_frozen]
+        if not existing_path_frozen.any():
+            ret = (self.costs[new_city_idx][0], None)
+            self.g_back[new_city_idx][existing_path_frozen] = ret
+            return ret
+        results = []
+        # OPT?: betting on bit operations here
+        if new_city_idx == 0:
+            for city_idx in range(self.ncities-1):
+                results.append((self.costs[new_city_idx][city_idx+1] + self.g(city_idx+1, existing_path_frozen)[0], city_idx+1))
+        else:
+            for (city_idx, bitval) in enumerate(existing_path_frozen):
+                if bitval:
+                    mask = ~util.zeros(self.ncities-1)
+                    mask[city_idx] = 0
+                    results.append((self.costs[new_city_idx][city_idx+1] + self.g(city_idx+1, existing_path_frozen & mask)[0], city_idx+1))
+        minResult = min(results, key = lambda x: x[0])
+        self.g_back[new_city_idx][existing_path_frozen] = minResult
+        return minResult
 
     def fancy( self,time_allowance=60.0 ):
-        # Held-Karp algorithm (mediocre tuple implementation)
-        # TODO: Remove cache to avoid tuple construction
+        # Held-Karp algorithm
         results = {}
         cities = self._scenario.getCities()
-        ncities = len(cities)
+        self.ncities = len(cities)
+        ncities = self.ncities
         foundOptimalTour = False
-        count = (ncities - 1) * (2**ncities)
+        count = 1
         start_time = time.time()
         # Set up the cost matrix & reduce it
         self.initializeReducedCostMatrix()
+        # Prepare / reset cache
+        self.g_back = {city._index: {} for city in cities}
         # Solve
-        result_algo = self.g(0, tuple(range(1, ncities)))
+        result_algo = self.g(0, ~util.zeros(ncities-1))
         route = [cities[0]]
-        remaining = tuple(range(1,ncities))
+        remaining = ~util.zeros(ncities-1)
         while result_algo[1] != None:
             route.append(cities[result_algo[1]])
-            remaining = tuple([x for x in remaining if x != result_algo[1]])
+            remaining[result_algo[1]-1] = 0
             result_algo = self.g(result_algo[1], remaining)
         end_time = time.time()
         bssf = TSPSolution(route)
@@ -364,7 +375,7 @@ class TSPSolver:
         results['count'] = count
         results['soln'] = bssf
         results['max'] = None
-        results['total'] = None
+        results['total'] = (ncities - 1) * (2**ncities)
         results['pruned'] = None
         return results
 
