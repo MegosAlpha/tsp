@@ -51,7 +51,8 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             for _ in 0..n {
                 level.cache.push(HashMap::new());
             }
-            for combo in (1..n).combinations(level.level_id) {
+            for cacheable_vec in (1..n).combinations(level.level_id).into_iter().par_bridge().map(|combo| {
+                let mut temp_cache: Vec<(usize, BTreeSet<i64>, (i64, i64))> = Vec::with_capacity((n-1) as usize);
                 for new_city_idx in 1..n {
                     let mut min_result: Option<(i64, i64)> = None;
                     let mut proceed = true;
@@ -86,7 +87,12 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                     for city_idx in &combo {
                         comboset.insert(*city_idx);
                     }
-                    level.cache[new_city_idx as usize].insert(comboset, min_result.unwrap());
+                    temp_cache.push((new_city_idx as usize, comboset, min_result.unwrap()));
+                }
+                temp_cache
+            }).collect::<Vec<Vec<(usize, BTreeSet<i64>, (i64, i64))>>>() {
+                for cacheable in cacheable_vec {
+                    level.cache[cacheable.0].insert(cacheable.1, cacheable.2);
                 }
             }
             levels.push(level);
