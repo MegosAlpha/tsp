@@ -1,7 +1,6 @@
-use numpy::ndarray::{ArrayD, ArrayView, ArrayViewD, ArrayViewMutD, Dimension, Array1, Array2, ArrayView2};
+use numpy::ndarray::{ArrayD, ArrayView, ArrayViewD, Array1};
 use numpy::{IntoPyArray, PyArrayDyn, PyReadonlyArrayDyn};
 use pyo3::{pymodule, types::PyModule, PyResult, Python};
-use std::ops::Index;
 use std::collections::{BTreeSet, HashMap};
 use itertools::Itertools;
 use rayon::prelude::*;
@@ -76,8 +75,8 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                                 comboset.insert(*elem);
                             }
                         }
-                        let result = (do_infinity_add(cost_matrix[(*city_idx as usize, new_city_idx as usize)], levels[level.level_id - 1].cache[*city_idx as usize].get(&comboset).unwrap().0), city_idx.clone());
-                        if min_result.is_none() || do_infinity_gt(min_result.unwrap().0, result.0) {
+                        let result = (do_infinity_add(cost_matrix[(*city_idx as usize, new_city_idx as usize)], levels[level.level_id - 1].cache[*city_idx as usize].get(&comboset).unwrap_or(&(-1,-1)).0), city_idx.clone());
+                        if result.0 != -1 && (min_result.is_none() || do_infinity_gt(min_result.unwrap().0, result.0)) {
                             min_result = Some(result);
                         }
                     }
