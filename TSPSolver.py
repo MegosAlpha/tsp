@@ -19,7 +19,7 @@ from TSPClasses import *
 import heapq
 import itertools
 from PriorityQueue import *
-from bitarray import bitarray, frozenbitarray, util
+import tsp
 
 # Augmented TSP Solution.
 # Represents a (potentially partial) path, incl. costs
@@ -116,6 +116,12 @@ class TSPSolver:
         lb += lb_col
         self.costs = costMatrix_T.transpose()
         self.lb = lb
+
+    def initializeInfinityRegulatedCostMatrix(self):
+        cities = self._scenario.getCities()
+        transformInfinity = lambda x: x if x != math.inf else -1
+        self.ircmatrix = np.array([[transformInfinity(citySrc.costTo(cityDest)) for cityDest in
+        cities] for citySrc in cities])
 
     ''' <summary>
         This is the entry point for the default solver
@@ -321,52 +327,19 @@ class TSPSolver:
         algorithm</returns>
     '''
 
-    def g(self, new_city_idx, existing_path_temp):
-        # Warning: indices probably broken
-        existing_path_frozen = frozenbitarray(existing_path_temp)
-        if existing_path_frozen in self.g_back[new_city_idx]:
-            return self.g_back[new_city_idx][existing_path_frozen]
-        if not existing_path_frozen.any():
-            ret = (self.costs[new_city_idx][0], None)
-            self.g_back[new_city_idx][existing_path_frozen] = ret
-            return ret
-        results = []
-        # OPT?: betting on bit operations here
-        if new_city_idx == 0:
-            for city_idx in range(self.ncities-1):
-                results.append((self.costs[new_city_idx][city_idx+1] + self.g(city_idx+1, existing_path_frozen)[0], city_idx+1))
-        else:
-            for (city_idx, bitval) in enumerate(existing_path_frozen):
-                if bitval:
-                    mask = ~util.zeros(self.ncities-1)
-                    mask[city_idx] = 0
-                    results.append((self.costs[new_city_idx][city_idx+1] + self.g(city_idx+1, existing_path_frozen & mask)[0], city_idx+1))
-        minResult = min(results, key = lambda x: x[0])
-        self.g_back[new_city_idx][existing_path_frozen] = minResult
-        return minResult
-
     def fancy( self,time_allowance=60.0 ):
         # Held-Karp algorithm
         results = {}
         cities = self._scenario.getCities()
-        self.ncities = len(cities)
-        ncities = self.ncities
-        foundOptimalTour = False
+        ncities = len(cities)
         count = 1
         start_time = time.time()
-        # Set up the cost matrix & reduce it
-        self.initializeReducedCostMatrix()
-        # Prepare / reset cache
-        self.g_back = {city._index: {} for city in cities}
-        # Solve
-        result_algo = self.g(0, ~util.zeros(ncities-1))
-        route = [cities[0]]
-        remaining = ~util.zeros(ncities-1)
-        while result_algo[1] != None:
-            route.append(cities[result_algo[1]])
-            remaining[result_algo[1]-1] = 0
-            result_algo = self.g(result_algo[1], remaining)
+        # Set up the cost matrix
+        self.initializeInfinityRegulatedCostMatrix();
+        # Use convenient package that solves the problem
+        route_idxs = tsp.solve_problem(self.ircmatrix, ncities);
         end_time = time.time()
+        route = [cities[x] for x in route_idxs][:-1]
         bssf = TSPSolution(route)
         # Set due to the spec
         self._bssf = bssf
