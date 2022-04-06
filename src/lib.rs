@@ -38,9 +38,9 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             level_id: 0,
             cache: Vec::new()
         };
-        for city_idx in 0..n {
+        for city_idx in 1..n {
             level0.cache.push(HashMap::new());
-            level0.cache[city_idx as usize].insert(BTreeSet::new(), (cost_matrix[(0 as usize, city_idx as usize)], -1));
+            level0.cache[(city_idx-1) as usize].insert(BTreeSet::new(), (cost_matrix[(0 as usize, city_idx as usize)], -1));
         }
         levels.push(level0);
         while levels.len() < (n-1) as usize {
@@ -48,7 +48,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                 level_id: levels.len(),
                 cache: Vec::new()
             };
-            for _ in 0..n {
+            for _ in 1..n {
                 level.cache.push(HashMap::new());
             }
             for cacheable_vec in (1..n).combinations(level.level_id).into_iter().par_bridge().map(|combo| {
@@ -75,7 +75,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                                 comboset.insert(*elem);
                             }
                         }
-                        let result = (do_infinity_add(cost_matrix[(*city_idx as usize, new_city_idx as usize)], levels[level.level_id - 1].cache[*city_idx as usize].get(&comboset).unwrap_or(&(-1,-1)).0), city_idx.clone());
+                        let result = (do_infinity_add(cost_matrix[(*city_idx as usize, new_city_idx as usize)], levels[level.level_id - 1].cache[(*city_idx-1) as usize].get(&comboset).unwrap_or(&(-1,-1)).0), city_idx.clone());
                         if result.0 != -1 && (min_result.is_none() || do_infinity_gt(min_result.unwrap().0, result.0)) {
                             min_result = Some(result);
                         }
@@ -87,7 +87,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                     for city_idx in &combo {
                         comboset.insert(*city_idx);
                     }
-                    temp_cache.push((new_city_idx as usize, comboset, min_result.unwrap()));
+                    temp_cache.push(((new_city_idx - 1) as usize, comboset, min_result.unwrap()));
                 }
                 temp_cache
             }).collect::<Vec<Vec<(usize, BTreeSet<i32>, (i32, i32))>>>() {
@@ -105,7 +105,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                     comboset.insert(elem);
                 }
             }
-            let result = (do_infinity_add(cost_matrix[(city_idx as usize, 0)], levels[(n-2) as usize].cache[city_idx as usize].get(&comboset).unwrap().0), city_idx.clone());
+            let result = (do_infinity_add(cost_matrix[(city_idx as usize, 0)], levels[(n-2) as usize].cache[(city_idx-1) as usize].get(&comboset).unwrap().0), city_idx.clone());
             if final_result.is_none() || do_infinity_gt(final_result.unwrap().0, result.0) {
                 final_result = Some(result);
             }
@@ -119,7 +119,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         while finals_tracker.1 != -1 {
             route.push(finals_tracker.1);
             remaining.remove(&finals_tracker.1);
-            finals_tracker = *levels[remaining.len()].cache[finals_tracker.1 as usize].get(&remaining).unwrap();
+            finals_tracker = *levels[remaining.len()].cache[(finals_tracker.1-1) as usize].get(&remaining).unwrap();
         }
         route.push(0);
         route.reverse();
