@@ -9,6 +9,7 @@ On this branch:
   - Bounded by 32-bit signed integers for all path lengths
   - Assumes that all input problems are solvable
   - All path lengths must be nonnegative
+  - Maximum problem size of 255 (indices stored with u8)
 
 ## How to Use
 
