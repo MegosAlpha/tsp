@@ -11,7 +11,7 @@ use rayon::prelude::*;
 // We can use BTreeMap instead, but then need an orderable set
 struct GLevel {
     level_id: usize,
-    cache: Vec<HashMap<BTreeSet<i32>, (i32, i32)>>
+    cache: Vec<HashMap<BTreeSet<u8>, (i32, u8)>>
 }
 
 #[pymodule]
@@ -34,7 +34,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     }
 
     /// Solve the TSP using Held-Karp, returning the indices of the completed route.
-    fn solve_problem(cost_matrix_py: ArrayViewD<'_, i64>, n: i32) -> ArrayD<i32> {
+    fn solve_problem(cost_matrix_py: ArrayViewD<'_, i64>, n: u8) -> ArrayD<u8> {
         // Process the cost matrix from Python
         let cost_slice = cost_matrix_py.to_slice().unwrap();
         let cost_slice_reduced_bits = cost_slice.iter().map(|elem| *elem as i32).collect::<Vec<i32>>();
@@ -48,7 +48,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         };
         for city_idx in 1..n {
             level0.cache.push(HashMap::new());
-            level0.cache[(city_idx-1) as usize].insert(BTreeSet::new(), (cost_matrix[(0 as usize, city_idx as usize)], -1));
+            level0.cache[(city_idx-1) as usize].insert(BTreeSet::new(), (cost_matrix[(0 as usize, city_idx as usize)], 0));
         }
         levels.push(level0);
         // Calculate each additional level
@@ -67,12 +67,12 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             // We take every combination (subset) of size equal to level
             for cacheable_vec in (1..n).combinations(level.level_id).into_iter().par_bridge().map(|combo| {
                 // The temporary cache represents the results of each combination
-                let mut temp_cache: Vec<(usize, BTreeSet<i32>, (i32, i32))> = Vec::with_capacity((n-1) as usize);
+                let mut temp_cache: Vec<(usize, BTreeSet<u8>, (i32, u8))> = Vec::with_capacity((n-1) as usize);
                 // For every city...
                 for new_city_idx in 1..n {
                     // Select the minimum result using the partial path,
                     // which is represented by the combination.
-                    let mut min_result: Option<(i32, i32)> = None;
+                    let mut min_result: Option<(i32, u8)> = None;
                     let mut proceed = true;
                     for elem in &combo {
                         if *elem == new_city_idx {
@@ -95,7 +95,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                                 comboset.insert(*elem);
                             }
                         }
-                        let result = (do_infinity_add(cost_matrix[(*city_idx as usize, new_city_idx as usize)], levels[level.level_id - 1].cache[(*city_idx-1) as usize].get(&comboset).unwrap_or(&(-1,-1)).0), city_idx.clone());
+                        let result = (do_infinity_add(cost_matrix[(*city_idx as usize, new_city_idx as usize)], levels[level.level_id - 1].cache[(*city_idx-1) as usize].get(&comboset).unwrap_or(&(-1,0)).0), city_idx.clone());
                         if result.0 != -1 && (min_result.is_none() || do_infinity_gt(min_result.unwrap().0, result.0)) {
                             min_result = Some(result);
                         }
@@ -112,7 +112,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                     temp_cache.push(((new_city_idx - 1) as usize, comboset, min_result.unwrap()));
                 }
                 temp_cache
-            }).collect::<Vec<Vec<(usize, BTreeSet<i32>, (i32, i32))>>>() {
+            }).collect::<Vec<Vec<(usize, BTreeSet<u8>, (i32, u8))>>>() {
                 // Combine all the temporary cache entries into the level cache
                 for cacheable in cacheable_vec {
                     level.cache[cacheable.0].insert(cacheable.1, cacheable.2);
@@ -122,7 +122,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             levels.push(level);
         }
         // Complete the final level separately
-        let mut final_result: Option<(i32, i32)> = None;
+        let mut final_result: Option<(i32, u8)> = None;
         for city_idx in 1..n {
             let mut comboset = BTreeSet::new();
             for elem in 1..n {
@@ -142,10 +142,13 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         for val in 1..n {
             remaining.insert(val);
         }
-        while finals_tracker.1 != -1 {
+        loop {
             route.push(finals_tracker.1);
             remaining.remove(&finals_tracker.1);
             finals_tracker = *levels[remaining.len()].cache[(finals_tracker.1-1) as usize].get(&remaining).unwrap();
+            if finals_tracker.1 == 0 {
+                break;
+            }
         }
         route.push(0);
         route.reverse();
@@ -159,9 +162,9 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         py: Python<'py>,
         cost_matrix_py: PyReadonlyArrayDyn<i64>,
         n: i64
-    ) -> &'py PyArrayDyn<i32> {
+    ) -> &'py PyArrayDyn<u8> {
         let cost_matrix_pyarr = cost_matrix_py.as_array();
-        let z = solve_problem(cost_matrix_pyarr, n as i32);
+        let z = solve_problem(cost_matrix_pyarr, n as u8);
         z.into_pyarray(py)
     }
 
