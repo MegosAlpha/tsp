@@ -40,7 +40,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
         let cost_slice_reduced_bits = cost_slice.iter().map(|elem| *elem as i32).collect::<Vec<i32>>();
         let cost_matrix = ArrayView::from_shape((n as usize, n as usize), &cost_slice_reduced_bits).unwrap();
         // Establish cache / sort-of DP table
-        let mut levels = Vec::new();
+        let mut levels: Vec<GLevel> = Vec::new();
         // Manually populate first level from cost matrix
         let mut level0 = GLevel {
             level_id: 0,
@@ -50,13 +50,13 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
             level0.cache.push(HashMap::new());
             level0.cache[(city_idx-1) as usize].insert(BTreeSet::new(), (cost_matrix[(0 as usize, city_idx as usize)], 0));
         }
-        levels.push(level0);
         // Calculate each additional level
         // TODO: Consider partial level construction to seed another algorithm / additional stage
         // At time of writing, the problem allocates too much memory on my PC around PS >=25.
-        while levels.len() < (n-1) as usize {
+        let mut cached_level_prev = level0;
+        while levels.len() < (n-2) as usize {
             let mut level = GLevel {
-                level_id: levels.len(),
+                level_id: levels.len() + 1,
                 cache: Vec::new()
             };
             // Create a path to value map (indices implicitly map the cities themselves)
@@ -95,7 +95,7 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                                 comboset.insert(*elem);
                             }
                         }
-                        let result = (do_infinity_add(cost_matrix[(*city_idx as usize, new_city_idx as usize)], levels[level.level_id - 1].cache[(*city_idx-1) as usize].get(&comboset).unwrap_or(&(-1,0)).0), city_idx.clone());
+                        let result = (do_infinity_add(cost_matrix[(*city_idx as usize, new_city_idx as usize)], cached_level_prev.cache[(*city_idx-1) as usize].get(&comboset).unwrap_or(&(-1,0)).0), city_idx.clone());
                         if result.0 != -1 && (min_result.is_none() || do_infinity_gt(min_result.unwrap().0, result.0)) {
                             min_result = Some(result);
                         }
@@ -119,8 +119,10 @@ fn tsp(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
                 }
             }
             // Complete the level, adding it to the main cache
-            levels.push(level);
+            levels.push(cached_level_prev);
+            cached_level_prev = level;
         }
+        levels.push(cached_level_prev);
         // Complete the final level separately
         let mut final_result: Option<(i32, u8)> = None;
         for city_idx in 1..n {
