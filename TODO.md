@@ -1,7 +1,7 @@
 TODO (TSP)
 ==========
 - Consider an additional algorithm stage, for acceleration and/or trying to avoid OOM
-- Improve the combination representation & related map/set algos
+- Possibly attempt to improve the combination representation & related map/set algos further
 - Consider GPU acceleration
-- Consider inverse combinations at the halfway point to reduce memory footprint
+- Consider doing combinations directly with `BitVec`s (cached combinations?)
 
