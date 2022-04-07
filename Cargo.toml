@@ -13,4 +13,5 @@ pyo3 = { version = "0.16.1", features = ["extension-module"] }
 numpy = "0.16"
 itertools = "0.10"
 rayon = "1.5"
+bitvec = "1"
 
